@@ -4,10 +4,14 @@ MODEL_DIR   = File.join(RAILS_ROOT, "app/models")
 FIXTURE_DIR = File.join(RAILS_ROOT, "test/fixtures")
 RSPEC_DIR   = File.join(RAILS_ROOT, "spec/models")
 RSPEC_FIXTURES = File.join(RAILS_ROOT, "spec/fixtures")
+EXEMPLAR_DIR = File.join(RAILS_ROOT, "test/exemplars")
+RSPEC_EXEMPLARS = File.join(RAILS_ROOT, "spec/exemplars")
 
 module AnnotateModels
 
-  PREFIX = "== Schema Information"
+  OLD_PREFIX = "== Schema Information"
+  PREFIX = "=begin Schema Information\n\n"
+  SUFFIX = "\n=end Schema Information\n\n"
   
   # Simple quoting for the default column value
   def self.quote(value)
@@ -28,8 +32,8 @@ module AnnotateModels
   # each column. The line contains the column name,
   # the type (and length), and any optional attributes
   def self.get_schema_info(klass, header)
-    info = "# #{header}\n#\n"
-    info << "# Table name: #{klass.table_name}\n#\n"
+    info = "#{header}"
+    info << " Table name: #{klass.table_name}\n\n"
     
     max_size = klass.column_names.collect{|name| name.size}.max + 1
     klass.columns.each do |col|
@@ -44,11 +48,11 @@ module AnnotateModels
       else
         col_type << "(#{col.limit})" if col.limit
       end 
-      info << sprintf("#  %-#{max_size}.#{max_size}s:%-15.15s %s", col.name, col_type, attrs.join(", ")).rstrip
+      info << sprintf("  %-#{max_size}.#{max_size}s:%-15.15s %s", col.name, col_type, attrs.join(", ")).rstrip
       info << "\n"
     end
 
-    info << "#\n\n"
+    info << "#{SUFFIX}"
   end
 
   # Add a schema block to a file. If the file already contains
@@ -60,7 +64,10 @@ module AnnotateModels
       content = File.read(file_name)
 
       # Remove old schema info
-      content.sub!(/^# #{PREFIX}.*?\n(#.*\n)*\n/, '')
+      content.sub!(/^# #{OLD_PREFIX}.*?\n(#.*\n)*\n/, '')
+      
+      # Remove old schema info in new format
+      content.sub!(/^#{PREFIX}.*?\n(.*\n)*#{SUFFIX}/, '')
 
       # Write it back
       File.open(file_name, "w") { |f| f.puts info_block + content }
@@ -84,10 +91,17 @@ module AnnotateModels
       
       rspec_fixture = File.join(RSPEC_FIXTURES, klass.table_name + ".yml")
       annotate_one_file(rspec_fixture, info)
+      
+      rspec_exemplar = File.join(RSPEC_FIXTURES, klass.name.underscore + "_exemplar.rb")
+      annotate_one_file(rspec_exemplar, info)
     end
 
     Dir.glob(File.join(FIXTURE_DIR, "**", klass.table_name + ".yml")) do | fixture_file_name |
       annotate_one_file(fixture_file_name, info)
+    end
+    
+    Dir.glob(File.join(EXEMPLAR_DIR, "**", klass.name.underscore+ "_exemplar.rb")) do |feature_file_name|
+      annotate_one_file(feature_file_name, info)
     end
   end
 
@@ -111,7 +125,7 @@ module AnnotateModels
   # We're passed a name of things that might be 
   # ActiveRecord models. If we can find the class, and
   # if its a subclass of ActiveRecord::Base,
-  # then pas it to the associated block
+  # then pass it to the associated block
 
   def self.do_annotations
     header = PREFIX.dup
