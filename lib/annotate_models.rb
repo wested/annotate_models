@@ -59,7 +59,7 @@ module AnnotateModels
   # a schema info block (a comment starting
   # with "Schema as of ..."), remove it first.
 
-  def self.annotate_one_file(file_name, info_block)
+  def self.annotate_one_file(file_name, info_block, yml_file=false)
     if File.exist?(file_name)
       content = File.read(file_name)
 
@@ -68,9 +68,14 @@ module AnnotateModels
       
       # Remove old schema info in new format
       content.sub!(/^#{PREFIX}.*?\n(.*\n)*#{SUFFIX}/, '')
-
-      # Write it back
-      File.open(file_name, "w") { |f| f.puts info_block + content }
+      
+      if yml_file
+        yml_quoted_block = info_block.gsub(/^(.*)/, '# \1')
+        File.open(file_name, "w") { |f| f.puts yml_quoted_block + content }
+      else
+        # Write it back
+        File.open(file_name, "w") { |f| f.puts info_block + content }
+      end
     end
   end
   
@@ -90,14 +95,14 @@ module AnnotateModels
       annotate_one_file(rspec_file_name, info)
       
       rspec_fixture = File.join(RSPEC_FIXTURES, klass.table_name + ".yml")
-      annotate_one_file(rspec_fixture, info)
+      annotate_one_file(rspec_fixture, info, true)
       
       rspec_exemplar = File.join(RSPEC_FIXTURES, klass.name.underscore + "_exemplar.rb")
       annotate_one_file(rspec_exemplar, info)
     end
 
     Dir.glob(File.join(FIXTURE_DIR, "**", klass.table_name + ".yml")) do | fixture_file_name |
-      annotate_one_file(fixture_file_name, info)
+      annotate_one_file(fixture_file_name, info, true)
     end
     
     Dir.glob(File.join(EXEMPLAR_DIR, "**", klass.name.underscore+ "_exemplar.rb")) do |feature_file_name|
